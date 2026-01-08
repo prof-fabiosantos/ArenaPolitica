@@ -1,0 +1,5 @@
+{
+  "name": "Arena Política",
+  "description": "A simulation tool where two AI agents debate political topics based on user-defined profiles, evaluated by a third agent representing the voter's interests.",
+  "requestFramePermissions": []
+}
