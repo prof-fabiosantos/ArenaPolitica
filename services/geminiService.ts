@@ -1,13 +1,9 @@
-import { GoogleGenAI, Type, Schema, HarmCategory, HarmBlockThreshold } from "@google/genai";
+import { GoogleGenAI, Type, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { Candidate, VoterProfile, Message, EvaluationResult } from "../types";
 
-// Ensure API Key is available
-const apiKey = process.env.API_KEY;
-if (!apiKey) {
-  console.error("API_KEY is missing from environment variables");
-}
-
-const ai = new GoogleGenAI({ apiKey: apiKey || '' });
+// Always use const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
+// The API key must be obtained exclusively from the environment variable process.env.API_KEY.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const SAFETY_SETTINGS = [
   { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -22,12 +18,29 @@ const cleanJSON = (text: string) => {
   return text.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
 };
 
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Generic retry wrapper
+async function withRetry<T>(fn: () => Promise<T>, retries = 3, fallbackValue: T): Promise<T> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      console.warn(`Attempt ${i + 1} failed. Retrying...`, error);
+      if (i === retries - 1) return fallbackValue;
+      await delay(1000 * (i + 1)); // Linear backoff: 1s, 2s, 3s
+    }
+  }
+  return fallbackValue;
+}
+
 // 1. Helper to enrich candidate profile using Google Search (Grounding)
 export const enrichCandidateProfile = async (name: string): Promise<string> => {
   if (!name) return "";
   
-  try {
-    const modelId = 'gemini-2.5-flash'; 
+  return withRetry(async () => {
+    // Basic Text Tasks: 'gemini-3-flash-preview'
+    const modelId = 'gemini-3-flash-preview'; 
     const response = await ai.models.generateContent({
       model: modelId,
       contents: `Search for the political profile, party affiliation, and main stances of ${name}. Summarize it in 2-3 sentences suitable for a debate simulation. Focus on ideology and key policy proposals.`,
@@ -37,11 +50,22 @@ export const enrichCandidateProfile = async (name: string): Promise<string> => {
       },
     });
     
-    return response.text || "Não foi possível encontrar informações.";
-  } catch (error) {
-    console.error("Error enriching profile:", error);
-    return "Erro ao buscar informações automáticas.";
-  }
+    let text = response.text || "Não foi possível encontrar informações.";
+
+    // Must extract URLs from groundingChunks
+    if (response.candidates?.[0]?.groundingMetadata?.groundingChunks) {
+      const chunks = response.candidates[0].groundingMetadata.groundingChunks;
+      const links = chunks
+        .map((chunk: any) => chunk.web?.uri)
+        .filter((uri: string) => uri);
+
+      if (links.length > 0) {
+        text += "\n\nFontes:\n" + [...new Set(links)].join("\n");
+      }
+    }
+
+    return text;
+  }, 3, "Erro ao buscar informações automáticas.");
 };
 
 // 2. Generate Moderator Turn
@@ -99,9 +123,10 @@ export const generateModeratorTurn = async (
     Fale em Português.
   `;
 
-  try {
+  return withRetry(async () => {
+    // Basic Text Tasks: 'gemini-3-flash-preview'
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3-flash-preview",
       contents: specificInstruction,
       config: {
         systemInstruction: systemInstruction,
@@ -111,10 +136,7 @@ export const generateModeratorTurn = async (
     });
 
     return response.text || "Prosseguindo com o debate.";
-  } catch (error) {
-    console.error("Error generating moderator turn:", error);
-    return "Vamos prosseguir com o debate.";
-  }
+  }, 3, "Vamos prosseguir com o debate.");
 };
 
 // 3. Generate a single turn of the debate
@@ -174,9 +196,10 @@ export const generateDebateTurn = async (
     ? `Comece o debate com sua Pergunta Base sobre: ${topic}.`
     : `Aqui está o histórico do debate até agora:\n${historyText}\n\nSua vez de falar (${phase}).`;
 
-  try {
+  return withRetry(async () => {
+    // Basic Text Tasks: 'gemini-3-flash-preview'
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         systemInstruction: systemInstruction,
@@ -186,10 +209,7 @@ export const generateDebateTurn = async (
     });
 
     return response.text || "...";
-  } catch (error) {
-    console.error("Error generating turn:", error);
-    return "Desculpe, perdi o fio da meada.";
-  }
+  }, 3, "Peço desculpas, houve uma falha técnica, mas mantenho minha posição.");
 };
 
 // 4. Evaluate the debate based on Voter Profile
@@ -203,13 +223,14 @@ export const evaluateDebate = async (
 
   const historyText = history.map(h => `${h.senderId === 'A' ? candidateA.name : h.senderId === 'B' ? candidateB.name : 'MODERADOR'} (${h.phase || 'Info'}): ${h.text}`).join('\n');
 
-  const scoreObjSchema: Schema = {
+  // Using Type from @google/genai
+  const scoreObjSchema = {
     type: Type.OBJECT, 
     properties: { a: { type: Type.INTEGER }, b: { type: Type.INTEGER }, reason: { type: Type.STRING } },
     required: ["a", "b", "reason"]
   };
 
-  const jsonSchema: Schema = {
+  const jsonSchema = {
     type: Type.OBJECT,
     properties: {
       winnerId: { type: Type.STRING, enum: ["A", "B", "Tie"] },
@@ -237,9 +258,24 @@ export const evaluateDebate = async (
     required: ["winnerId", "scores", "reasoning", "breakdown"]
   };
 
-  try {
+  const dummyScore = { a: 0, b: 0, reason: "N/A" };
+  const fallbackResult: EvaluationResult = {
+      winnerId: "Tie",
+      scores: { candidateA: 0, candidateB: 0 },
+      reasoning: "Não foi possível processar a avaliação devido a instabilidade no serviço.",
+      breakdown: {
+        coherence: dummyScore,
+        alignment: dummyScore,
+        viability: dummyScore,
+        consistency: dummyScore,
+        clarity: dummyScore
+      }
+    };
+
+  return withRetry(async () => {
+    // Basic Text Tasks with JSON: 'gemini-3-flash-preview'
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3-flash-preview",
       contents: `
         Você é um agente avaliador imparcial responsável por analisar um debate político com base EXCLUSIVAMENTE no perfil do eleitor fornecido.
 
@@ -282,21 +318,5 @@ export const evaluateDebate = async (
     const text = cleanJSON(response.text || "{}");
     const result = JSON.parse(text);
     return result as EvaluationResult;
-  } catch (error) {
-    console.error("Evaluation failed", error);
-    
-    const dummyScore = { a: 0, b: 0, reason: "N/A" };
-    return {
-      winnerId: "Tie",
-      scores: { candidateA: 0, candidateB: 0 },
-      reasoning: `Erro na avaliação do debate. Detalhes: ${error instanceof Error ? error.message : String(error)}. \n\nVerifique se o tema é permitido ou tente novamente.`,
-      breakdown: {
-        coherence: dummyScore,
-        alignment: dummyScore,
-        viability: dummyScore,
-        consistency: dummyScore,
-        clarity: dummyScore
-      }
-    };
-  }
+  }, 3, fallbackResult);
 };
