@@ -23,6 +23,8 @@ const App: React.FC = () => {
   
   const [isTyping, setIsTyping] = useState(false);
   const turnCountRef = useRef(0);
+  // Mutex to strictly prevent overlapping turns
+  const processingRef = useRef(false);
 
   // Transition from Landing to Setup
   const handleEnterArena = () => {
@@ -37,6 +39,7 @@ const App: React.FC = () => {
     setTopic(t);
     setMessages([]);
     turnCountRef.current = 0;
+    processingRef.current = false;
     setStatus(AppStatus.DEBATE);
   };
 
@@ -47,124 +50,132 @@ const App: React.FC = () => {
 
   // Debate Logic Loop
   const processTurn = useCallback(async () => {
+    // Basic validation
     if (status !== AppStatus.DEBATE || !candA || !candB) return;
     
-    // Check flow based on message history and turn counts
-    
-    // 1. Moderator OPENING (if no messages)
-    if (messages.length === 0) {
-      setIsTyping(true);
-      const modText = await generateModeratorTurn('OPENING', topic, candA, candB);
-      setMessages([{
-        id: 'mod-opening',
-        senderId: 'Moderator',
-        text: modText,
-        timestamp: Date.now(),
-        phase: 'Abertura'
-      }]);
-      setIsTyping(false);
-      return;
-    }
+    // STRICT CHECK: If we are already processing a turn (waiting for AI), DO NOT start another.
+    if (processingRef.current) return;
 
-    // 2. Moderator TRANSITION (After Round 1, before Round 2)
-    // Round 1 ends when turnCount is 4.
-    if (turnCountRef.current === TURNS_PER_ROUND && messages[messages.length - 1].senderId !== 'Moderator') {
-      setIsTyping(true);
-      await new Promise(r => setTimeout(r, 600));
-      const modText = await generateModeratorTurn('TRANSITION', topic, candA, candB);
-      setMessages(prev => [...prev, {
-        id: `mod-transition-${Date.now()}`,
-        senderId: 'Moderator',
-        text: modText,
-        timestamp: Date.now(),
-        phase: 'Transição'
-      }]);
-      setIsTyping(false);
-      return;
-    }
-
-    // 3. Moderator CLOSING (After Round 2)
-    if (turnCountRef.current >= MAX_TURNS && messages[messages.length - 1].senderId !== 'Moderator') {
-      setIsTyping(true);
-      await new Promise(r => setTimeout(r, 600));
-      const modText = await generateModeratorTurn('CLOSING', topic, candA, candB);
-      setMessages(prev => [...prev, {
-        id: `mod-closing-${Date.now()}`,
-        senderId: 'Moderator',
-        text: modText,
-        timestamp: Date.now(),
-        phase: 'Encerramento'
-      }]);
-      setIsTyping(false);
-      // Logic continues in useEffect to switch status after this message
-      return;
-    }
-
-    // 4. End Debate Trigger (After Moderator Closing)
-    if (turnCountRef.current >= MAX_TURNS && messages[messages.length - 1].senderId === 'Moderator') {
-       setStatus(AppStatus.EVALUATING);
-       return;
-    }
-
-    // 5. Candidate Turns
-    // If we are here, it's a candidate's turn
+    // Lock the process
+    processingRef.current = true;
     setIsTyping(true);
 
-    const currentTurn = turnCountRef.current;
-    const currentRound = Math.floor(currentTurn / TURNS_PER_ROUND);
-    const stepInRound = currentTurn % TURNS_PER_ROUND; 
+    try {
+      // Check flow based on message history and turn counts
+      
+      // 1. Moderator OPENING (if no messages)
+      if (messages.length === 0) {
+        const modText = await generateModeratorTurn('OPENING', topic, candA, candB);
+        setMessages([{
+          id: 'mod-opening',
+          senderId: 'Moderator',
+          text: modText,
+          timestamp: Date.now(),
+          phase: 'Abertura'
+        }]);
+        return; // Finally block will handle unlocking
+      }
 
-    const roundStarter = currentRound % 2 === 0 ? candA : candB;
-    const roundOpponent = currentRound % 2 === 0 ? candB : candA;
+      // 2. Moderator TRANSITION (After Round 1, before Round 2)
+      // Round 1 ends when turnCount is 4.
+      if (turnCountRef.current === TURNS_PER_ROUND && messages[messages.length - 1].senderId !== 'Moderator') {
+        await new Promise(r => setTimeout(r, 600));
+        const modText = await generateModeratorTurn('TRANSITION', topic, candA, candB);
+        setMessages(prev => [...prev, {
+          id: `mod-transition-${Date.now()}`,
+          senderId: 'Moderator',
+          text: modText,
+          timestamp: Date.now(),
+          phase: 'Transição'
+        }]);
+        return;
+      }
 
-    let currentSpeaker: Candidate;
-    let opponent: Candidate;
+      // 3. Moderator CLOSING (After Round 2)
+      if (turnCountRef.current >= MAX_TURNS && messages[messages.length - 1].senderId !== 'Moderator') {
+        await new Promise(r => setTimeout(r, 600));
+        const modText = await generateModeratorTurn('CLOSING', topic, candA, candB);
+        setMessages(prev => [...prev, {
+          id: `mod-closing-${Date.now()}`,
+          senderId: 'Moderator',
+          text: modText,
+          timestamp: Date.now(),
+          phase: 'Encerramento'
+        }]);
+        return;
+      }
 
-    if (stepInRound === 0 || stepInRound === 2) {
-      currentSpeaker = roundStarter;
-      opponent = roundOpponent;
-    } else {
-      currentSpeaker = roundOpponent;
-      opponent = roundStarter;
+      // 4. End Debate Trigger (After Moderator Closing)
+      if (turnCountRef.current >= MAX_TURNS && messages[messages.length - 1].senderId === 'Moderator') {
+         setStatus(AppStatus.EVALUATING);
+         return;
+      }
+
+      // 5. Candidate Turns
+      // If we are here, it's a candidate's turn
+      const currentTurn = turnCountRef.current;
+      const currentRound = Math.floor(currentTurn / TURNS_PER_ROUND);
+      const stepInRound = currentTurn % TURNS_PER_ROUND; 
+
+      const roundStarter = currentRound % 2 === 0 ? candA : candB;
+      const roundOpponent = currentRound % 2 === 0 ? candB : candA;
+
+      let currentSpeaker: Candidate;
+      let opponent: Candidate;
+
+      if (stepInRound === 0 || stepInRound === 2) {
+        currentSpeaker = roundStarter;
+        opponent = roundOpponent;
+      } else {
+        currentSpeaker = roundOpponent;
+        opponent = roundStarter;
+      }
+
+      const phaseName = PHASE_NAMES[stepInRound];
+
+      // Delay slightly for realism and UI pacing
+      await new Promise(r => setTimeout(r, 1200));
+
+      // This await ensures we have the response BEFORE proceeding
+      const responseText = await generateDebateTurn(
+        currentSpeaker,
+        opponent,
+        topic,
+        messages,
+        phaseName
+      );
+
+      const newMessage: Message = {
+        id: Date.now().toString(),
+        senderId: currentSpeaker.id,
+        text: responseText,
+        timestamp: Date.now(),
+        phase: phaseName
+      };
+
+      setMessages(prev => [...prev, newMessage]);
+      turnCountRef.current += 1;
+
+    } catch (error) {
+      console.error("Error in debate loop:", error);
+    } finally {
+      // Release the lock ONLY after everything is done
+      processingRef.current = false;
+      setIsTyping(false);
     }
-
-    const phaseName = PHASE_NAMES[stepInRound];
-
-    // Delay slightly for realism
-    await new Promise(r => setTimeout(r, 1200));
-
-    const responseText = await generateDebateTurn(
-      currentSpeaker,
-      opponent,
-      topic,
-      messages,
-      phaseName
-    );
-
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      senderId: currentSpeaker.id,
-      text: responseText,
-      timestamp: Date.now(),
-      phase: phaseName
-    };
-
-    setMessages(prev => [...prev, newMessage]);
-    turnCountRef.current += 1;
-    setIsTyping(false);
 
   }, [candA, candB, messages, status, topic]);
 
   // Effect to trigger next turn automatically
   useEffect(() => {
+    // Only trigger if we are in debate mode and NOT currently typing/processing
     if (status === AppStatus.DEBATE && !isTyping) {
-      // Small debounce to prevent race conditions
       const timer = setTimeout(() => {
         processTurn();
-      }, 500);
+      }, 1000); // Increased delay slightly to make the "wait" more perceptible
       return () => clearTimeout(timer);
     }
-  }, [messages, status, isTyping, processTurn]);
+  }, [status, isTyping, processTurn]); // Removed 'messages' from dependency to rely strictly on isTyping/processTurn cycle
 
   // Evaluation Effect
   useEffect(() => {
@@ -186,6 +197,7 @@ const App: React.FC = () => {
     setMessages([]);
     setEvaluation(null);
     turnCountRef.current = 0;
+    processingRef.current = false;
   };
 
   return (
