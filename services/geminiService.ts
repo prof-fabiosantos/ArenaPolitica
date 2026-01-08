@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { GoogleGenAI, Type, Schema, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { Candidate, VoterProfile, Message, EvaluationResult } from "../types";
 
 // Ensure API Key is available
@@ -8,6 +8,19 @@ if (!apiKey) {
 }
 
 const ai = new GoogleGenAI({ apiKey: apiKey || '' });
+
+const SAFETY_SETTINGS = [
+  { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+  { category: HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY, threshold: HarmBlockThreshold.BLOCK_NONE }
+];
+
+// Helper to clean JSON string if model adds markdown blocks
+const cleanJSON = (text: string) => {
+  return text.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
+};
 
 // 1. Helper to enrich candidate profile using Google Search (Grounding)
 export const enrichCandidateProfile = async (name: string): Promise<string> => {
@@ -20,6 +33,7 @@ export const enrichCandidateProfile = async (name: string): Promise<string> => {
       contents: `Search for the political profile, party affiliation, and main stances of ${name}. Summarize it in 2-3 sentences suitable for a debate simulation. Focus on ideology and key policy proposals.`,
       config: {
         tools: [{ googleSearch: {} }],
+        safetySettings: SAFETY_SETTINGS,
       },
     });
     
@@ -91,7 +105,8 @@ export const generateModeratorTurn = async (
       contents: specificInstruction,
       config: {
         systemInstruction: systemInstruction,
-        temperature: 0.5, // Lower temperature for more consistent/neutral tone
+        temperature: 0.5,
+        safetySettings: SAFETY_SETTINGS,
       }
     });
 
@@ -150,7 +165,6 @@ export const generateDebateTurn = async (
 
   // Filter history to exclude Moderator instructions for the prompt context, 
   // or keep them but label them clearly so the model knows context.
-  // We'll keep them but format them.
   const historyText = history.map(h => {
     if (h.senderId === 'Moderator') return `[MODERADOR]: ${h.text}`;
     return `[${h.phase || 'Turno'}] ${h.senderId === currentSpeaker.id ? 'Você' : opponent.name}: ${h.text}`;
@@ -167,6 +181,7 @@ export const generateDebateTurn = async (
       config: {
         systemInstruction: systemInstruction,
         temperature: 0.8,
+        safetySettings: SAFETY_SETTINGS,
       }
     });
 
@@ -241,8 +256,6 @@ export const evaluateDebate = async (
         Nome: ${voter.name}
         Descrição (Prioridades, Valores, Visão de Estado, Risco, Rejeições): "${voter.interests}"
         
-        (Utilize a descrição acima para inferir: Prioridades com pesos, Valores sociais, Visão de Estado, Tolerância a risco e Rejeições explícitas).
-
         CRITÉRIOS DE AVALIAÇÃO
         Avalie cada candidato nos seguintes eixos (Escala 0-100 para compatibilidade com o sistema):
         1. Coerência interna (Peso: 20%): O candidato manteve-se fiel à sua ideologia?
@@ -250,13 +263,6 @@ export const evaluateDebate = async (
         3. Viabilidade prática das propostas (Peso: 15%): São aplicáveis no mundo real?
         4. Consistência institucional (Peso: 15%): Respeito às leis/estado.
         5. Clareza, honestidade e reconhecimento de limites (Peso: 15%)
-
-        PROCESSO DE AVALIAÇÃO
-        1. Analise o debate completo.
-        2. Avalie cada critério separadamente.
-        3. Aplique os pesos do eleitor e os pesos dos critérios.
-        4. Gere score final ponderado.
-        5. Explique os principais fatores que influenciaram o resultado.
 
         CONTEXTO DO DEBATE
         Tópico: ${topic}
@@ -269,19 +275,21 @@ export const evaluateDebate = async (
       config: {
         responseMimeType: "application/json",
         responseSchema: jsonSchema,
+        safetySettings: SAFETY_SETTINGS, // Disable safety blocks for political content analysis
       }
     });
 
-    const result = JSON.parse(response.text || "{}");
+    const text = cleanJSON(response.text || "{}");
+    const result = JSON.parse(text);
     return result as EvaluationResult;
   } catch (error) {
     console.error("Evaluation failed", error);
-    // Return a dummy error result to prevent crash
+    
     const dummyScore = { a: 0, b: 0, reason: "N/A" };
     return {
       winnerId: "Tie",
       scores: { candidateA: 0, candidateB: 0 },
-      reasoning: "Falha na avaliação do debate.",
+      reasoning: `Erro na avaliação do debate. Detalhes: ${error instanceof Error ? error.message : String(error)}. \n\nVerifique se o tema é permitido ou tente novamente.`,
       breakdown: {
         coherence: dummyScore,
         alignment: dummyScore,
