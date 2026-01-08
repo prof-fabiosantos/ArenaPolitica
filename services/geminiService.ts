@@ -39,8 +39,8 @@ export const enrichCandidateProfile = async (name: string): Promise<string> => {
   if (!name) return "";
   
   return withRetry(async () => {
-    // Basic Text Tasks: 'gemini-3-flash-preview'
-    const modelId = 'gemini-3-flash-preview'; 
+    // Using gemini-2.5-flash
+    const modelId = 'gemini-2.5-flash'; 
     const response = await ai.models.generateContent({
       model: modelId,
       contents: `Search for the political profile, party affiliation, and main stances of ${name}. Summarize it in 2-3 sentences suitable for a debate simulation. Focus on ideology and key policy proposals.`,
@@ -124,9 +124,9 @@ export const generateModeratorTurn = async (
   `;
 
   return withRetry(async () => {
-    // Basic Text Tasks: 'gemini-3-flash-preview'
+    // Using gemini-2.5-flash
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash",
       contents: specificInstruction,
       config: {
         systemInstruction: systemInstruction,
@@ -197,9 +197,9 @@ export const generateDebateTurn = async (
     : `Aqui está o histórico do debate até agora:\n${historyText}\n\nSua vez de falar (${phase}).`;
 
   return withRetry(async () => {
-    // Basic Text Tasks: 'gemini-3-flash-preview'
+    // Using gemini-2.5-flash
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash",
       contents: prompt,
       config: {
         systemInstruction: systemInstruction,
@@ -273,9 +273,9 @@ export const evaluateDebate = async (
     };
 
   return withRetry(async () => {
-    // Basic Text Tasks with JSON: 'gemini-3-flash-preview'
+    // Using gemini-2.5-flash
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash",
       contents: `
         Você é um agente avaliador imparcial responsável por analisar um debate político com base EXCLUSIVAMENTE no perfil do eleitor fornecido.
 
