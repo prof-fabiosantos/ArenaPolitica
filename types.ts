@@ -37,6 +37,7 @@ export interface EvaluationResult {
 }
 
 export enum AppStatus {
+  LANDING = 'LANDING',
   SETUP = 'SETUP',
   DEBATE = 'DEBATE',
   EVALUATING = 'EVALUATING',

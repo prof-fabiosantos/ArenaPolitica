@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import SetupForm from './components/SetupForm';
 import DebateView from './components/DebateView';
 import ScoreCard from './components/ScoreCard';
+import LandingPage from './components/LandingPage';
 import { generateDebateTurn, generateModeratorTurn, evaluateDebate } from './services/geminiService';
 import { Candidate, VoterProfile, Message, AppStatus, EvaluationResult } from './types';
 
@@ -12,7 +13,7 @@ const MAX_TURNS = TURNS_PER_ROUND * TOTAL_ROUNDS; // 8 Turns total
 const PHASE_NAMES = ['Pergunta Base', 'Réplica', 'Tréplica', 'Contra-argumento'];
 
 const App: React.FC = () => {
-  const [status, setStatus] = useState<AppStatus>(AppStatus.SETUP);
+  const [status, setStatus] = useState<AppStatus>(AppStatus.LANDING);
   const [candA, setCandA] = useState<Candidate | null>(null);
   const [candB, setCandB] = useState<Candidate | null>(null);
   const [voter, setVoter] = useState<VoterProfile | null>(null);
@@ -22,6 +23,11 @@ const App: React.FC = () => {
   
   const [isTyping, setIsTyping] = useState(false);
   const turnCountRef = useRef(0);
+
+  // Transition from Landing to Setup
+  const handleEnterArena = () => {
+    setStatus(AppStatus.SETUP);
+  };
 
   // Start the simulation
   const handleStart = (cA: Candidate, cB: Candidate, v: VoterProfile, t: string) => {
@@ -183,17 +189,24 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center py-10 px-4">
-      {/* Header */}
-      <header className="mb-8 text-center">
-        <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-500 mb-2">
-          Arena Política
-        </h1>
-        <p className="text-slate-400 text-sm">Simulação de Debate & Análise de Perfil com IA</p>
-      </header>
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center py-10 px-4 font-inter">
+      
+      {/* Show header only if NOT in landing page for cleaner look, or keep it small */}
+      {status !== AppStatus.LANDING && (
+        <header className="mb-8 text-center animate-fadeIn">
+          <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-500 mb-1 cursor-pointer" onClick={() => setStatus(AppStatus.LANDING)}>
+            Arena Política
+          </h1>
+          <p className="text-slate-500 text-xs">Simulação com Gemini 2.5 Flash</p>
+        </header>
+      )}
 
       {/* Main Content Area */}
-      <main className="w-full max-w-5xl">
+      <main className="w-full max-w-5xl flex-1 flex flex-col justify-center">
+        {status === AppStatus.LANDING && (
+          <LandingPage onEnter={handleEnterArena} />
+        )}
+
         {status === AppStatus.SETUP && (
           <SetupForm onStart={handleStart} />
         )}
@@ -228,9 +241,11 @@ const App: React.FC = () => {
         )}
       </main>
       
-      <footer className="mt-12 text-slate-600 text-xs">
-        Powered by Google Gemini 2.0 Flash & Pro
-      </footer>
+      {status !== AppStatus.LANDING && (
+        <footer className="mt-12 text-slate-700 text-xs text-center">
+          Powered by Google Gemini 2.5 Flash
+        </footer>
+      )}
     </div>
   );
 };
