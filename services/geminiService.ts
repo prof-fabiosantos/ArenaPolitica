@@ -5,9 +5,8 @@ import { Candidate, VoterProfile, Message, EvaluationResult } from "../types";
 // The API key must be obtained exclusively from the environment variable process.env.API_KEY.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// Using gemini-3-flash-preview as it is the recommended model for basic text tasks
-// and has better availability/quota management than specific preview builds.
-const TEXT_MODEL = "gemini-3-flash-preview";
+// Updated to gemini-2.5-flash-lite as requested.
+const TEXT_MODEL = "gemini-2.5-flash-lite";
 
 const SAFETY_SETTINGS = [
   { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
