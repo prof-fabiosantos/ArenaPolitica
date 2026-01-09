@@ -5,8 +5,9 @@ import { Candidate, VoterProfile, Message, EvaluationResult } from "../types";
 // The API key must be obtained exclusively from the environment variable process.env.API_KEY.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// Text generation model requested by user
-const TEXT_MODEL = "gemini-2.0-flash-lite-preview-02-05";
+// Using gemini-3-flash-preview as it is the recommended model for basic text tasks
+// and has better availability/quota management than specific preview builds.
+const TEXT_MODEL = "gemini-3-flash-preview";
 
 const SAFETY_SETTINGS = [
   { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -124,17 +125,24 @@ const cleanJSON = (text: string) => {
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Generic retry wrapper with Exponential Backoff
-async function withRetry<T>(fn: () => Promise<T>, retries = 5, fallbackValue: T): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, retries = 3, fallbackValue: T): Promise<T> {
   for (let i = 0; i < retries; i++) {
     try {
       return await fn();
-    } catch (error) {
-      console.warn(`Attempt ${i + 1} failed. Retrying...`, error);
-      if (i === retries - 1) return fallbackValue;
+    } catch (error: any) {
+      // Handle 429 Too Many Requests specifically
+      const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('Quota');
       
-      // Exponential backoff: 1s, 2s, 4s, 8s... + random jitter to avoid thundering herd
-      const delayTime = Math.pow(2, i) * 1000 + Math.random() * 500;
-      await delay(delayTime); 
+      if (isRateLimit) {
+        console.warn(`Quota exceeded (Attempt ${i + 1}/${retries}). Waiting 15s...`);
+        // Force a long wait for rate limits (30s suggested by error, but lets try 15s to be responsive-ish)
+        await delay(15000); 
+      } else {
+        console.warn(`Attempt ${i + 1} failed. Retrying...`, error);
+        // Standard exponential backoff
+        const delayTime = Math.pow(2, i) * 1000 + Math.random() * 500;
+        await delay(delayTime); 
+      }
     }
   }
   return fallbackValue;
@@ -145,7 +153,6 @@ export const enrichCandidateProfile = async (name: string): Promise<string> => {
   if (!name) return "";
   
   return withRetry(async () => {
-    // Using gemini-2.0-flash-lite-preview-02-05
     const response = await ai.models.generateContent({
       model: TEXT_MODEL,
       contents: `Search for the political profile, party affiliation, and main stances of ${name}. Summarize it in 2-3 sentences suitable for a debate simulation. Focus on ideology and key policy proposals.`,
@@ -229,7 +236,6 @@ export const generateModeratorTurn = async (
   `;
 
   return withRetry(async () => {
-    // Using gemini-2.0-flash-lite-preview-02-05
     const response = await ai.models.generateContent({
       model: TEXT_MODEL,
       contents: specificInstruction,
@@ -241,7 +247,7 @@ export const generateModeratorTurn = async (
     });
 
     return response.text || "Prosseguindo com o debate.";
-  }, 5, "Vamos prosseguir com o debate.");
+  }, 3, "Vamos prosseguir com o debate.");
 };
 
 // 3. Generate a single turn of the debate
@@ -302,7 +308,6 @@ export const generateDebateTurn = async (
     : `Aqui está o histórico do debate até agora:\n${historyText}\n\nSua vez de falar (${phase}).`;
 
   return withRetry(async () => {
-    // Using gemini-2.0-flash-lite-preview-02-05
     const response = await ai.models.generateContent({
       model: TEXT_MODEL,
       contents: prompt,
@@ -314,7 +319,7 @@ export const generateDebateTurn = async (
     });
 
     return response.text || "...";
-  }, 5, "Peço desculpas, houve uma falha técnica, mas mantenho minha posição.");
+  }, 3, "Peço desculpas, houve uma falha técnica, mas mantenho minha posição.");
 };
 
 // 4. Evaluate the debate based on Voter Profile
@@ -378,7 +383,6 @@ export const evaluateDebate = async (
     };
 
   return withRetry(async () => {
-    // Using gemini-2.0-flash-lite-preview-02-05
     const response = await ai.models.generateContent({
       model: TEXT_MODEL,
       contents: `
@@ -423,5 +427,5 @@ export const evaluateDebate = async (
     const text = cleanJSON(response.text || "{}");
     const result = JSON.parse(text);
     return result as EvaluationResult;
-  }, 5, fallbackResult);
+  }, 3, fallbackResult);
 };

@@ -206,10 +206,10 @@ const App: React.FC = () => {
     if (status === AppStatus.DEBATE && !isTyping) {
       const timer = setTimeout(() => {
         processTurn();
-      }, 1000); // Increased delay slightly to make the "wait" more perceptible
+      }, 3000); // Increased to 3s to reduce rate limit pressure
       return () => clearTimeout(timer);
     }
-  }, [status, isTyping, processTurn]); // Removed 'messages' from dependency to rely strictly on isTyping/processTurn cycle
+  }, [status, isTyping, processTurn]); 
 
   // Evaluation Effect
   useEffect(() => {
@@ -243,7 +243,7 @@ const App: React.FC = () => {
           <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-500 mb-1 cursor-pointer" onClick={() => setStatus(AppStatus.LANDING)}>
             Arena Política
           </h1>
-          <p className="text-slate-500 text-xs">Simulação com Gemini 2.0 Flash Lite</p>
+          <p className="text-slate-500 text-xs">Simulação com Gemini 3 Flash Preview</p>
         </header>
       )}
 
@@ -291,7 +291,7 @@ const App: React.FC = () => {
       
       {status !== AppStatus.LANDING && (
         <footer className="mt-12 text-slate-700 text-xs text-center">
-          Powered by Google Gemini 2.0 Flash Lite
+          Powered by Google Gemini 3 Flash Preview
         </footer>
       )}
     </div>

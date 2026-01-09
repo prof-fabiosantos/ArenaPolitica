@@ -5,6 +5,12 @@ export interface PlatformStats {
   totalDebates: number;
 }
 
+const safeErrorMessage = (err: any): string => {
+  if (typeof err === 'string') return err;
+  if (err?.message) return err.message;
+  return JSON.stringify(err);
+};
+
 export const getPlatformStats = async (): Promise<PlatformStats> => {
   try {
     const { data, error } = await supabase
@@ -13,9 +19,8 @@ export const getPlatformStats = async (): Promise<PlatformStats> => {
       .single();
 
     if (error) {
-      // Silence expected errors when DB is not set up
-      const msg = error.message;
-      const code = (error as any).code; // Type casting for safety if types aren't perfect
+      const msg = safeErrorMessage(error);
+      const code = (error as any).code;
 
       // '42P01' is Postgres code for "undefined_table"
       if (msg !== 'Supabase not configured' && code !== '42P01' && code !== 'PGRST116') {
@@ -45,7 +50,7 @@ export const incrementVisitorCount = async () => {
     if (!error) {
       sessionStorage.setItem('visited_arena', 'true');
     } else {
-      const msg = error.message;
+      const msg = safeErrorMessage(error);
       const code = (error as any).code;
       // '42883' is Postgres code for "undefined_function"
       if (msg !== 'Supabase not configured' && code !== '42883') {
@@ -53,7 +58,7 @@ export const incrementVisitorCount = async () => {
       }
     }
   } catch (err) {
-    console.warn('Visitor tracking skipped.');
+    console.warn(`Visitor tracking skipped: ${safeErrorMessage(err)}`);
   }
 };
 
@@ -61,7 +66,7 @@ export const incrementDebateCount = async () => {
   try {
     const { error } = await supabase.rpc('increment_debates');
     if (error) {
-      const msg = error.message;
+      const msg = safeErrorMessage(error);
       const code = (error as any).code;
       if (msg !== 'Supabase not configured' && code !== '42883') {
         console.warn(`Failed to increment debates: ${msg}`);

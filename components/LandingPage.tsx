@@ -26,7 +26,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onEnter }) => {
       <div className="text-center max-w-4xl mx-auto px-6 mb-12">
         <div className="inline-block px-4 py-1.5 mb-6 rounded-full bg-indigo-500/10 border border-indigo-500/30">
           <span className="text-indigo-300 text-xs font-semibold tracking-wider uppercase">
-            Powered by Gemini 2.0 Flash Lite & Supabase
+            Powered by Gemini 3 Flash Preview & Supabase
           </span>
         </div>
         
