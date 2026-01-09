@@ -5,6 +5,9 @@ import { Candidate, VoterProfile, Message, EvaluationResult } from "../types";
 // The API key must be obtained exclusively from the environment variable process.env.API_KEY.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
+// Text generation model requested by user
+const TEXT_MODEL = "gemini-2.0-flash-lite-preview-02-05";
+
 const SAFETY_SETTINGS = [
   { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
   { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -142,10 +145,9 @@ export const enrichCandidateProfile = async (name: string): Promise<string> => {
   if (!name) return "";
   
   return withRetry(async () => {
-    // Using gemini-2.5-flash
-    const modelId = 'gemini-2.5-flash'; 
+    // Using gemini-2.0-flash-lite-preview-02-05
     const response = await ai.models.generateContent({
-      model: modelId,
+      model: TEXT_MODEL,
       contents: `Search for the political profile, party affiliation, and main stances of ${name}. Summarize it in 2-3 sentences suitable for a debate simulation. Focus on ideology and key policy proposals.`,
       config: {
         tools: [{ googleSearch: {} }],
@@ -227,9 +229,9 @@ export const generateModeratorTurn = async (
   `;
 
   return withRetry(async () => {
-    // Using gemini-2.5-flash
+    // Using gemini-2.0-flash-lite-preview-02-05
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: TEXT_MODEL,
       contents: specificInstruction,
       config: {
         systemInstruction: systemInstruction,
@@ -300,9 +302,9 @@ export const generateDebateTurn = async (
     : `Aqui está o histórico do debate até agora:\n${historyText}\n\nSua vez de falar (${phase}).`;
 
   return withRetry(async () => {
-    // Using gemini-2.5-flash
+    // Using gemini-2.0-flash-lite-preview-02-05
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: TEXT_MODEL,
       contents: prompt,
       config: {
         systemInstruction: systemInstruction,
@@ -376,9 +378,9 @@ export const evaluateDebate = async (
     };
 
   return withRetry(async () => {
-    // Using gemini-2.5-flash
+    // Using gemini-2.0-flash-lite-preview-02-05
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: TEXT_MODEL,
       contents: `
         Você é um agente avaliador imparcial responsável por analisar um debate político com base EXCLUSIVAMENTE no perfil do eleitor fornecido.
 

@@ -13,16 +13,23 @@ export const getPlatformStats = async (): Promise<PlatformStats> => {
       .single();
 
     if (error) {
-      console.error('Error fetching stats:', error);
+      // Silence expected errors when DB is not set up
+      const msg = error.message;
+      const code = (error as any).code; // Type casting for safety if types aren't perfect
+
+      // '42P01' is Postgres code for "undefined_table"
+      if (msg !== 'Supabase not configured' && code !== '42P01' && code !== 'PGRST116') {
+         console.warn(`Stats unavailable: ${msg} (${code || 'no-code'})`);
+      }
       return { activeUsers: 0, totalDebates: 0 };
     }
 
     return {
-      activeUsers: data.visitors_count || 0,
-      totalDebates: data.debates_count || 0
+      activeUsers: data?.visitors_count || 0,
+      totalDebates: data?.debates_count || 0
     };
   } catch (err) {
-    console.error('Unexpected error fetching stats:', err);
+    // console.warn('Stats service unavailable');
     return { activeUsers: 0, totalDebates: 0 };
   }
 };
@@ -38,10 +45,15 @@ export const incrementVisitorCount = async () => {
     if (!error) {
       sessionStorage.setItem('visited_arena', 'true');
     } else {
-      console.error('Error incrementing visitors:', error);
+      const msg = error.message;
+      const code = (error as any).code;
+      // '42883' is Postgres code for "undefined_function"
+      if (msg !== 'Supabase not configured' && code !== '42883') {
+        console.warn(`Failed to increment visitors: ${msg}`);
+      }
     }
   } catch (err) {
-    console.error('Unexpected error incrementing visitors:', err);
+    console.warn('Visitor tracking skipped.');
   }
 };
 
@@ -49,9 +61,13 @@ export const incrementDebateCount = async () => {
   try {
     const { error } = await supabase.rpc('increment_debates');
     if (error) {
-      console.error('Error incrementing debates:', error);
+      const msg = error.message;
+      const code = (error as any).code;
+      if (msg !== 'Supabase not configured' && code !== '42883') {
+        console.warn(`Failed to increment debates: ${msg}`);
+      }
     }
   } catch (err) {
-    console.error('Unexpected error incrementing debates:', err);
+    console.warn('Debate tracking skipped.');
   }
 };
