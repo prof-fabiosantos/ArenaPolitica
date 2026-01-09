@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getPlatformStats, PlatformStats } from '../services/statsService';
+import { getPlatformStats, incrementVisitorCount, PlatformStats } from '../services/statsService';
 
 interface LandingPageProps {
   onEnter: () => void;
@@ -9,6 +9,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ onEnter }) => {
   const [stats, setStats] = useState<PlatformStats | null>(null);
 
   useEffect(() => {
+    // Increment visitor count (only once per session handled by service)
+    incrementVisitorCount();
+
+    // Fetch current stats
     const fetchStats = async () => {
       const data = await getPlatformStats();
       setStats(data);
@@ -22,7 +26,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onEnter }) => {
       <div className="text-center max-w-4xl mx-auto px-6 mb-12">
         <div className="inline-block px-4 py-1.5 mb-6 rounded-full bg-indigo-500/10 border border-indigo-500/30">
           <span className="text-indigo-300 text-xs font-semibold tracking-wider uppercase">
-            Powered by Gemini 2.5 Flash
+            Powered by Gemini 2.5 Flash & Supabase
           </span>
         </div>
         
@@ -68,7 +72,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onEnter }) => {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                 </span>
-               <span className="text-slate-400 text-xs uppercase tracking-widest">Visitantes Globais</span>
+               <span className="text-slate-400 text-xs uppercase tracking-widest">Visitantes Reais</span>
              </div>
              {stats ? (
                <span className="text-3xl font-mono font-bold text-white animate-fadeIn">{stats.activeUsers.toLocaleString()}</span>
