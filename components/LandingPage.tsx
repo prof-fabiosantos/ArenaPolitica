@@ -1,14 +1,25 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { getPlatformStats, PlatformStats } from '../services/statsService';
 
 interface LandingPageProps {
   onEnter: () => void;
 }
 
 const LandingPage: React.FC<LandingPageProps> = ({ onEnter }) => {
+  const [stats, setStats] = useState<PlatformStats | null>(null);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      const data = await getPlatformStats();
+      setStats(data);
+    };
+    fetchStats();
+  }, []);
+
   return (
-    <div className="flex flex-col min-h-[80vh] items-center justify-center animate-fadeIn">
+    <div className="flex flex-col min-h-[80vh] items-center justify-center animate-fadeIn w-full">
       {/* Hero Section */}
-      <div className="text-center max-w-4xl mx-auto px-6 mb-16">
+      <div className="text-center max-w-4xl mx-auto px-6 mb-12">
         <div className="inline-block px-4 py-1.5 mb-6 rounded-full bg-indigo-500/10 border border-indigo-500/30">
           <span className="text-indigo-300 text-xs font-semibold tracking-wider uppercase">
             Powered by Gemini 2.5 Flash
@@ -34,6 +45,38 @@ const LandingPage: React.FC<LandingPageProps> = ({ onEnter }) => {
             <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
           </span>
         </button>
+      </div>
+
+      {/* Stats Bar */}
+      <div className="w-full max-w-3xl px-4 mb-16">
+        <div className="grid grid-cols-2 gap-4 bg-slate-900/80 border border-slate-700 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+          {/* Shine effect */}
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500 to-transparent opacity-50"></div>
+          
+          <div className="flex flex-col items-center justify-center border-r border-slate-700">
+             <span className="text-slate-400 text-xs uppercase tracking-widest mb-1">Debates Realizados</span>
+             {stats ? (
+               <span className="text-3xl font-mono font-bold text-white animate-fadeIn">{stats.totalDebates.toLocaleString()}</span>
+             ) : (
+               <div className="h-9 w-24 bg-slate-800 rounded animate-pulse"></div>
+             )}
+          </div>
+
+          <div className="flex flex-col items-center justify-center">
+             <div className="flex items-center gap-2 mb-1">
+               <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+               <span className="text-slate-400 text-xs uppercase tracking-widest">Visitantes Globais</span>
+             </div>
+             {stats ? (
+               <span className="text-3xl font-mono font-bold text-white animate-fadeIn">{stats.activeUsers.toLocaleString()}</span>
+             ) : (
+               <div className="h-9 w-24 bg-slate-800 rounded animate-pulse"></div>
+             )}
+          </div>
+        </div>
       </div>
 
       {/* Features Grid */}

@@ -4,6 +4,7 @@ import DebateView from './components/DebateView';
 import ScoreCard from './components/ScoreCard';
 import LandingPage from './components/LandingPage';
 import { generateDebateTurn, generateModeratorTurn, evaluateDebate, playGeneratedAudio, getAudioContext } from './services/geminiService';
+import { incrementDebateCount } from './services/statsService';
 import { Candidate, VoterProfile, Message, AppStatus, EvaluationResult } from './types';
 
 const TURNS_PER_ROUND = 4;
@@ -38,6 +39,9 @@ const App: React.FC = () => {
     // Initialize Audio Context on user interaction to comply with browser autoplay policies
     getAudioContext().resume();
     
+    // Register stats
+    incrementDebateCount();
+
     setCandA(cA);
     setCandB(cB);
     setVoter(v);
