@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type, HarmCategory, HarmBlockThreshold } from "@google/genai";
+import { GoogleGenAI, Type, HarmCategory, HarmBlockThreshold, Modality } from "@google/genai";
 import { Candidate, VoterProfile, Message, EvaluationResult } from "../types";
 
 // Always use const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
@@ -12,6 +12,106 @@ const SAFETY_SETTINGS = [
   { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
   { category: HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY, threshold: HarmBlockThreshold.BLOCK_NONE }
 ];
+
+// --- AUDIO CONTEXT MANAGEMENT ---
+let audioContext: AudioContext | null = null;
+
+export const getAudioContext = () => {
+  if (!audioContext) {
+    audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+  }
+  return audioContext;
+};
+
+// Helper to decode Base64 string to byte array
+function decodeBase64(base64: string) {
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
+
+// Helper to decode raw PCM data from Gemini into an AudioBuffer
+async function decodeAudioData(
+  data: Uint8Array,
+  ctx: AudioContext,
+  sampleRate: number = 24000,
+  numChannels: number = 1,
+): Promise<AudioBuffer> {
+  const dataInt16 = new Int16Array(data.buffer);
+  const frameCount = dataInt16.length / numChannels;
+  const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
+
+  for (let channel = 0; channel < numChannels; channel++) {
+    const channelData = buffer.getChannelData(channel);
+    for (let i = 0; i < frameCount; i++) {
+      // Convert Int16 to Float32 [-1.0, 1.0]
+      channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
+    }
+  }
+  return buffer;
+}
+
+export const playGeneratedAudio = async (text: string, voiceName: string): Promise<void> => {
+  const ctx = getAudioContext();
+  if (ctx.state === 'suspended') {
+    await ctx.resume();
+  }
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-preview-tts",
+      contents: [{ parts: [{ text: text }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: voiceName },
+          },
+        },
+      },
+    });
+
+    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    
+    if (!base64Audio) {
+      console.warn("No audio data received from Gemini TTS.");
+      return;
+    }
+
+    const audioBytes = decodeBase64(base64Audio);
+    const audioBuffer = await decodeAudioData(audioBytes, ctx);
+
+    return new Promise((resolve) => {
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      const gainNode = ctx.createGain();
+      // Smooth start/end to avoid clicks
+      gainNode.gain.setValueAtTime(0, ctx.currentTime);
+      gainNode.gain.linearRampToValueAtTime(1, ctx.currentTime + 0.1);
+      gainNode.gain.setValueAtTime(1, ctx.currentTime + audioBuffer.duration - 0.1);
+      gainNode.gain.linearRampToValueAtTime(0, ctx.currentTime + audioBuffer.duration);
+
+      source.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      
+      source.onended = () => {
+        resolve();
+      };
+      source.start();
+    });
+
+  } catch (err) {
+    console.error("Error playing audio:", err);
+    // Resolve anyway so the debate doesn't freeze if audio fails
+    return Promise.resolve();
+  }
+};
+
+// --- END AUDIO HELPERS ---
 
 // Helper to clean JSON string if model adds markdown blocks
 const cleanJSON = (text: string) => {

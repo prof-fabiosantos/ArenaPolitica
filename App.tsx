@@ -3,7 +3,7 @@ import SetupForm from './components/SetupForm';
 import DebateView from './components/DebateView';
 import ScoreCard from './components/ScoreCard';
 import LandingPage from './components/LandingPage';
-import { generateDebateTurn, generateModeratorTurn, evaluateDebate } from './services/geminiService';
+import { generateDebateTurn, generateModeratorTurn, evaluateDebate, playGeneratedAudio, getAudioContext } from './services/geminiService';
 import { Candidate, VoterProfile, Message, AppStatus, EvaluationResult } from './types';
 
 const TURNS_PER_ROUND = 4;
@@ -22,6 +22,8 @@ const App: React.FC = () => {
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
   
   const [isTyping, setIsTyping] = useState(false);
+  const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+
   const turnCountRef = useRef(0);
   // Mutex to strictly prevent overlapping turns
   const processingRef = useRef(false);
@@ -33,6 +35,9 @@ const App: React.FC = () => {
 
   // Start the simulation
   const handleStart = (cA: Candidate, cB: Candidate, v: VoterProfile, t: string) => {
+    // Initialize Audio Context on user interaction to comply with browser autoplay policies
+    getAudioContext().resume();
+    
     setCandA(cA);
     setCandB(cB);
     setVoter(v);
@@ -60,6 +65,12 @@ const App: React.FC = () => {
     processingRef.current = true;
     setIsTyping(true);
 
+    // Helper to strip HTML tags for TTS
+    const stripHtml = (html: string) => {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      return doc.body.textContent || "";
+    };
+
     try {
       // Check flow based on message history and turn counts
       
@@ -73,6 +84,10 @@ const App: React.FC = () => {
           timestamp: Date.now(),
           phase: 'Abertura'
         }]);
+
+        if (isAudioEnabled) {
+          await playGeneratedAudio(stripHtml(modText), 'Kore');
+        }
         return; // Finally block will handle unlocking
       }
 
@@ -88,6 +103,10 @@ const App: React.FC = () => {
           timestamp: Date.now(),
           phase: 'Transição'
         }]);
+
+        if (isAudioEnabled) {
+          await playGeneratedAudio(stripHtml(modText), 'Kore');
+        }
         return;
       }
 
@@ -102,6 +121,10 @@ const App: React.FC = () => {
           timestamp: Date.now(),
           phase: 'Encerramento'
         }]);
+
+        if (isAudioEnabled) {
+           await playGeneratedAudio(stripHtml(modText), 'Kore');
+        }
         return;
       }
 
@@ -156,15 +179,22 @@ const App: React.FC = () => {
       setMessages(prev => [...prev, newMessage]);
       turnCountRef.current += 1;
 
+      // Play Audio for Candidate
+      if (isAudioEnabled) {
+        // Assign distinct voices. A gets 'Fenrir', B gets 'Puck'
+        const voice = currentSpeaker.id === 'A' ? 'Fenrir' : 'Puck';
+        await playGeneratedAudio(stripHtml(responseText), voice);
+      }
+
     } catch (error) {
       console.error("Error in debate loop:", error);
     } finally {
-      // Release the lock ONLY after everything is done
+      // Release the lock ONLY after everything is done (including audio playback)
       processingRef.current = false;
       setIsTyping(false);
     }
 
-  }, [candA, candB, messages, status, topic]);
+  }, [candA, candB, messages, status, topic, isAudioEnabled]);
 
   // Effect to trigger next turn automatically
   useEffect(() => {
@@ -232,6 +262,8 @@ const App: React.FC = () => {
                isTyping={isTyping}
                onStop={handleStopDebate}
                status={status}
+               isAudioEnabled={isAudioEnabled}
+               onToggleAudio={() => setIsAudioEnabled(!isAudioEnabled)}
              />
              {status === AppStatus.EVALUATING && (
                 <div className="text-center p-8 animate-pulse">

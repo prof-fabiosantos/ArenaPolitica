@@ -8,9 +8,11 @@ interface DebateViewProps {
   isTyping: boolean;
   onStop: () => void;
   status: string;
+  isAudioEnabled?: boolean;
+  onToggleAudio?: () => void;
 }
 
-const DebateView: React.FC<DebateViewProps> = ({ messages, candA, candB, isTyping, onStop, status }) => {
+const DebateView: React.FC<DebateViewProps> = ({ messages, candA, candB, isTyping, onStop, status, isAudioEnabled, onToggleAudio }) => {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -40,14 +42,31 @@ const DebateView: React.FC<DebateViewProps> = ({ messages, candA, candB, isTypin
             </div>
         </div>
 
-        {status === 'DEBATE' && (
-             <button 
-             onClick={onStop}
-             className="px-3 py-1 bg-red-600/20 text-red-400 border border-red-600/50 rounded hover:bg-red-600/30 text-xs transition-colors"
-           >
-             Encerrar
-           </button>
-        )}
+        <div className="flex items-center gap-2">
+            {/* Audio Toggle */}
+            {onToggleAudio && (
+                <button 
+                  onClick={onToggleAudio}
+                  className={`p-2 rounded hover:bg-slate-700 transition-colors ${isAudioEnabled ? 'text-green-400' : 'text-slate-500'}`}
+                  title={isAudioEnabled ? "Mutar" : "Desmutar"}
+                >
+                   {isAudioEnabled ? (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+                   ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" /></svg>
+                   )}
+                </button>
+            )}
+
+            {status === 'DEBATE' && (
+                <button 
+                onClick={onStop}
+                className="px-3 py-1 bg-red-600/20 text-red-400 border border-red-600/50 rounded hover:bg-red-600/30 text-xs transition-colors"
+              >
+                Encerrar
+              </button>
+            )}
+        </div>
       </div>
 
       {/* Chat Area */}
