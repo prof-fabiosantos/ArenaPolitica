@@ -9,8 +9,10 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     define: {
-      // Polyfill process.env.API_KEY for the client-side build
-      'process.env.API_KEY': JSON.stringify(env.API_KEY)
+      // Polyfill process.env for the client-side build
+      'process.env.API_KEY': JSON.stringify(env.API_KEY),
+      'process.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
+      'process.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY)
     }
   };
 });

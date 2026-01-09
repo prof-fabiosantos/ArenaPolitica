@@ -120,15 +120,18 @@ const cleanJSON = (text: string) => {
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Generic retry wrapper
-async function withRetry<T>(fn: () => Promise<T>, retries = 3, fallbackValue: T): Promise<T> {
+// Generic retry wrapper with Exponential Backoff
+async function withRetry<T>(fn: () => Promise<T>, retries = 5, fallbackValue: T): Promise<T> {
   for (let i = 0; i < retries; i++) {
     try {
       return await fn();
     } catch (error) {
       console.warn(`Attempt ${i + 1} failed. Retrying...`, error);
       if (i === retries - 1) return fallbackValue;
-      await delay(1000 * (i + 1)); // Linear backoff: 1s, 2s, 3s
+      
+      // Exponential backoff: 1s, 2s, 4s, 8s... + random jitter to avoid thundering herd
+      const delayTime = Math.pow(2, i) * 1000 + Math.random() * 500;
+      await delay(delayTime); 
     }
   }
   return fallbackValue;
@@ -236,7 +239,7 @@ export const generateModeratorTurn = async (
     });
 
     return response.text || "Prosseguindo com o debate.";
-  }, 3, "Vamos prosseguir com o debate.");
+  }, 5, "Vamos prosseguir com o debate.");
 };
 
 // 3. Generate a single turn of the debate
@@ -309,7 +312,7 @@ export const generateDebateTurn = async (
     });
 
     return response.text || "...";
-  }, 3, "Peço desculpas, houve uma falha técnica, mas mantenho minha posição.");
+  }, 5, "Peço desculpas, houve uma falha técnica, mas mantenho minha posição.");
 };
 
 // 4. Evaluate the debate based on Voter Profile
@@ -418,5 +421,5 @@ export const evaluateDebate = async (
     const text = cleanJSON(response.text || "{}");
     const result = JSON.parse(text);
     return result as EvaluationResult;
-  }, 3, fallbackResult);
+  }, 5, fallbackResult);
 };
